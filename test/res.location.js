@@ -5,7 +5,7 @@ var express = require('../')
   , assert = require('assert')
   , url = require('url');
 
-describe.only('res', function(){
+describe('res', function(){
   describe('.location(url)', function(){
     it('should set the header', function(done){
       var app = express();
