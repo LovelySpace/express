@@ -1,3 +1,4 @@
+'use strict'
 
 var after = require('after');
 var express = require('../')
@@ -60,7 +61,36 @@ describe('Router', function(){
     router.handle({ method: 'GET' }, {}, done)
   })
 
+  it('handle missing method', function (done) {
+    var all = false
+    var router = new Router()
+    var route = router.route('/foo')
+    var use = false
+
+    route.post(function (req, res, next) { next(new Error('should not run')) })
+    route.all(function (req, res, next) {
+      all = true
+      next()
+    })
+    route.get(function (req, res, next) { next(new Error('should not run')) })
+
+    router.get('/foo', function (req, res, next) { next(new Error('should not run')) })
+    router.use(function (req, res, next) {
+      use = true
+      next()
+    })
+
+    router.handle({ url: '/foo' }, {}, function (err) {
+      if (err) return done(err)
+      assert.ok(all)
+      assert.ok(use)
+      done()
+    })
+  })
+
   it('should not stack overflow with many registered routes', function(done){
+    this.timeout(5000) // long-running test
+
     var handler = function(req, res){ res.end(new Error('wrong handler')) };
     var router = new Router();
 
@@ -74,6 +104,56 @@ describe('Router', function(){
 
     router.handle({ url: '/', method: 'GET' }, { end: done });
   });
+
+  it('should not stack overflow with a large sync route stack', function (done) {
+    this.timeout(5000) // long-running test
+
+    var router = new Router()
+
+    router.get('/foo', function (req, res, next) {
+      req.counter = 0
+      next()
+    })
+
+    for (var i = 0; i < 6000; i++) {
+      router.get('/foo', function (req, res, next) {
+        req.counter++
+        next()
+      })
+    }
+
+    router.get('/foo', function (req, res) {
+      assert.strictEqual(req.counter, 6000)
+      res.end()
+    })
+
+    router.handle({ url: '/foo', method: 'GET' }, { end: done })
+  })
+
+  it('should not stack overflow with a large sync middleware stack', function (done) {
+    this.timeout(5000) // long-running test
+
+    var router = new Router()
+
+    router.use(function (req, res, next) {
+      req.counter = 0
+      next()
+    })
+
+    for (var i = 0; i < 6000; i++) {
+      router.use(function (req, res, next) {
+        req.counter++
+        next()
+      })
+    }
+
+    router.use(function (req, res) {
+      assert.strictEqual(req.counter, 6000)
+      res.end()
+    })
+
+    router.handle({ url: '/', method: 'GET' }, { end: done })
+  })
 
   describe('.handle', function(){
     it('should dispatch', function(done){
@@ -148,7 +228,7 @@ describe('Router', function(){
     it('should handle throwing inside routes with params', function(done) {
       var router = new Router();
 
-      router.get('/foo/:id', function(req, res, next){
+      router.get('/foo/:id', function () {
         throw new Error('foo');
       });
 
